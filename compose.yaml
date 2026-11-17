@@ -1,0 +1,63 @@
+name: hostmon-light
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-5m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-3}"
+    compress: "${DOCKER_LOG_COMPRESS:-true}"
+
+services:
+  hostmon-light:
+    image: "${IMAGE_REPOSITORY:?Set IMAGE_REPOSITORY}:${IMAGE_TAG:?Set IMAGE_TAG}"
+    restart: unless-stopped
+    user: "${HOSTMON_UID:-65532}:${HOSTMON_GID:-65532}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Host networking deliberately avoids Docker port-publishing/UFW bypass.
+    # LISTEN MUST contain this host's LAN IP, never a loopback-only address.
+    network_mode: host
+    environment:
+      HOST_PROC: /host/proc
+      MONITOR_LISTEN: "${HOST_LAN_IP:?Set HOST_LAN_IP}:${MONITOR_PORT:-9109}"
+      MONITOR_HOSTNAME: "${MONITOR_HOSTNAME:?Set MONITOR_HOSTNAME}"
+      MONITOR_TOKEN_FILE: /run/secrets/api_token
+      MONITOR_SAMPLE_INTERVAL: "${MONITOR_SAMPLE_INTERVAL:-10s}"
+      MONITOR_MAX_SAMPLE_AGE: "${MONITOR_MAX_SAMPLE_AGE:-30s}"
+      MONITOR_HTTP_READ_HEADER_TIMEOUT: "${MONITOR_HTTP_READ_HEADER_TIMEOUT:-5s}"
+      MONITOR_HTTP_WRITE_TIMEOUT: "${MONITOR_HTTP_WRITE_TIMEOUT:-5s}"
+      MONITOR_HTTP_IDLE_TIMEOUT: "${MONITOR_HTTP_IDLE_TIMEOUT:-30s}"
+      MONITOR_FILESYSTEMS: "${MONITOR_FILESYSTEMS:-root=/host/disks/root}"
+      MONITOR_LOG_LEVEL: "${MONITOR_LOG_LEVEL:-info}"
+      MONITOR_LOG_FORMAT: "${MONITOR_LOG_FORMAT:-json}"
+    volumes:
+      - type: bind
+        source: /proc
+        target: /host/proc
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${MONITOR_DISK_ROOT_SOURCE:?Set MONITOR_DISK_ROOT_SOURCE}"
+        target: /host/disks/root
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${MONITOR_TOKEN_HOST_FILE:-./secrets/api_token}"
+        target: /run/secrets/api_token
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      # Shell-free probe using the configured LAN listen address.
+      test: ["CMD", "/hostmon-light", "healthcheck"]
+      interval: "${MONITOR_HEALTH_INTERVAL:-30s}"
+      timeout: "${MONITOR_HEALTH_TIMEOUT:-3s}"
+      retries: ${MONITOR_HEALTH_RETRIES:-3}
+      start_period: "${MONITOR_HEALTH_START_PERIOD:-20s}"
+    mem_limit: "${MONITOR_MEMORY_LIMIT:-64m}"
+    cpus: "${MONITOR_CPU_LIMIT:-0.25}"
+    pids_limit: ${MONITOR_PIDS_LIMIT:-32}
+    logging: *logging

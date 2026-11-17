@@ -1,0 +1,10 @@
+name: hostmon-light-build
+services:
+  hostmon-light:
+    image: "${IMAGE_REPOSITORY:?IMAGE_REPOSITORY setzen}:${IMAGE_TAG:?IMAGE_TAG setzen}"
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GO_VERSION: "${GO_VERSION:?GO_VERSION setzen}"
